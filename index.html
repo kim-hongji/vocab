@@ -905,7 +905,17 @@ body {
 <!-- Data Modal -->
 <div class="modal-overlay" id="data-modal">
   <div class="modal">
-    <h2>데이터 관리</h2>
+    <h2>설정</h2>
+    <div class="form-group">
+      <label>동기화 코드</label>
+      <input type="text" id="input-sync-code" placeholder="예: mywords123" autocomplete="off">
+      <p style="font-size:12px;color:var(--muted-foreground);margin-top:4px;">같은 코드를 입력하면 어떤 기기에서든 같은 단어장을 사용할 수 있어요.</p>
+    </div>
+    <div id="sync-status" style="font-size:13px;margin-bottom:16px;"></div>
+    <div class="modal-actions" style="margin-top:0;margin-bottom:16px;">
+      <button class="btn btn-primary" style="width:100%;height:40px;" onclick="saveSyncCode()">동기화 연결</button>
+    </div>
+    <div class="separator"></div>
     <div class="form-group">
       <label>JSON 데이터</label>
       <textarea class="data-textarea" id="data-textarea" placeholder="여기에 JSON 데이터를 붙여넣으세요..."></textarea>
@@ -1174,6 +1184,8 @@ function shuffle(arr) {
 
 function openDataModal() {
   document.getElementById('data-textarea').value = '';
+  document.getElementById('input-sync-code').value = getSyncCode();
+  updateSyncStatus();
   document.getElementById('data-modal').classList.add('active');
 }
 function closeDataModal() {
@@ -1231,6 +1243,102 @@ document.getElementById('input-antonym').addEventListener('keydown', (e) => {
 });
 
 renderWords();
+</script>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAlwAMqaGuUfUEq4dBw4Jer8CReRx4j6uI",
+  authDomain: "vocab-5e42b.firebaseapp.com",
+  databaseURL: "https://vocab-5e42b-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "vocab-5e42b",
+  storageBucket: "vocab-5e42b.firebasestorage.app",
+  messagingSenderId: "68056478170",
+  appId: "1:68056478170:web:827484bf242bd2b64590e3"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+let syncListener = null;
+let isSyncing = false;
+
+// Make functions globally accessible
+window.getSyncCode = function() {
+  return localStorage.getItem('vocab-sync-code') || '';
+};
+
+window.saveSyncCode = function() {
+  const code = document.getElementById('input-sync-code').value.trim();
+  if (!code) {
+    showToast('동기화 코드를 입력하세요.');
+    return;
+  }
+  localStorage.setItem('vocab-sync-code', code);
+  startSync(code);
+  updateSyncStatus();
+  showToast('동기화가 연결되었습니다!');
+};
+
+window.updateSyncStatus = function() {
+  const el = document.getElementById('sync-status');
+  const code = getSyncCode();
+  if (code) {
+    el.innerHTML = '<span style="color:var(--success);">연결됨: <strong>' + code + '</strong></span>';
+  } else {
+    el.innerHTML = '<span style="color:var(--muted-foreground);">연결 안 됨</span>';
+  }
+};
+
+function pushToFirebase() {
+  const code = getSyncCode();
+  if (!code || isSyncing) return;
+  const wordsRef = ref(db, 'rooms/' + code + '/words');
+  set(wordsRef, words).catch(err => {
+    console.error('Firebase push error:', err);
+  });
+}
+
+function startSync(code) {
+  // Remove old listener
+  if (syncListener) {
+    syncListener();
+    syncListener = null;
+  }
+
+  const wordsRef = ref(db, 'rooms/' + code + '/words');
+
+  // Push current local data first
+  pushToFirebase();
+
+  // Listen for remote changes
+  syncListener = onValue(wordsRef, (snapshot) => {
+    const remoteWords = snapshot.val();
+    if (remoteWords && Array.isArray(remoteWords)) {
+      isSyncing = true;
+      words = remoteWords;
+      localStorage.setItem('vocab-words', JSON.stringify(words));
+      renderWords();
+      isSyncing = false;
+    }
+  });
+}
+
+// Override save to also push to Firebase
+const originalSave = window.save;
+window.save = function() {
+  originalSave();
+  pushToFirebase();
+};
+
+// Auto-connect on load
+const initialCode = getSyncCode();
+if (initialCode) {
+  startSync(initialCode);
+}
 </script>
 </body>
 </html>
