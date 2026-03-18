@@ -765,6 +765,74 @@ body {
   margin: 16px 0;
 }
 
+/* ===== Tag Input ===== */
+.tag-input-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  min-height: 40px;
+  background: var(--background);
+  border: 1px solid var(--input);
+  border-radius: calc(var(--radius) - 2px);
+  cursor: text;
+  transition: all 0.15s;
+  align-items: center;
+}
+.tag-input-container:focus-within {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px oklch(0.708 0 0 / 0.2);
+}
+.tag-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--secondary);
+  border-radius: calc(var(--radius) - 4px);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--secondary-foreground);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.tag-item .tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  transition: all 0.15s;
+}
+.tag-item .tag-remove:hover {
+  background: var(--destructive);
+  color: var(--destructive-foreground);
+}
+.tag-input {
+  flex: 1;
+  min-width: 80px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--foreground);
+  padding: 0;
+  height: 24px;
+}
+.tag-input::placeholder {
+  color: var(--muted-foreground);
+  opacity: 0.6;
+}
+
 /* ===== Desktop layout ===== */
 @media (min-width: 500px) {
   .page { max-width: 480px; margin: 0 auto; }
@@ -895,11 +963,15 @@ body {
     </div>
     <div class="form-group">
       <label>동의어</label>
-      <input type="text" id="input-synonym" placeholder="예: plentiful, ample">
+      <div class="tag-input-container" id="synonym-tags" onclick="this.querySelector('.tag-input').focus()">
+        <input type="text" class="tag-input" id="input-synonym" placeholder="입력 후 Enter">
+      </div>
     </div>
     <div class="form-group">
       <label>반의어</label>
-      <input type="text" id="input-antonym" placeholder="예: scarce, rare">
+      <div class="tag-input-container" id="antonym-tags" onclick="this.querySelector('.tag-input').focus()">
+        <input type="text" class="tag-input" id="input-antonym" placeholder="입력 후 Enter">
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeAddModal()">취소</button>
@@ -941,6 +1013,14 @@ body {
 
 <script>
 let words = JSON.parse(localStorage.getItem('vocab-words') || '[]');
+// Migrate old string synonym/antonym to arrays
+words = words.map(w => ({
+  ...w,
+  synonym: Array.isArray(w.synonym) ? w.synonym : (w.synonym ? w.synonym.split(',').map(s => s.trim()).filter(Boolean) : []),
+  antonym: Array.isArray(w.antonym) ? w.antonym : (w.antonym ? w.antonym.split(',').map(s => s.trim()).filter(Boolean) : [])
+}));
+localStorage.setItem('vocab-words', JSON.stringify(words));
+
 let editingId = null;
 let studyMode = 'meaning-to-word';
 let shuffleOn = true;
@@ -983,8 +1063,8 @@ function renderWords() {
       </div>
       <div class="word-meaning">${esc(w.meaning)}</div>
       <div class="word-meta">
-        ${w.synonym ? `<span class="badge badge-syn">동의어: ${esc(w.synonym)}</span>` : ''}
-        ${w.antonym ? `<span class="badge badge-ant">반의어: ${esc(w.antonym)}</span>` : ''}
+        ${(w.synonym||[]).map(s => `<span class="badge badge-syn">${esc(s)}</span>`).join('')}
+        ${(w.antonym||[]).map(s => `<span class="badge badge-ant">${esc(s)}</span>`).join('')}
       </div>
     </div>
   `).join('');
@@ -996,13 +1076,52 @@ function esc(s) {
   return d.innerHTML;
 }
 
+function getTagsFromContainer(containerId) {
+  return Array.from(document.getElementById(containerId).querySelectorAll('.tag-item'))
+    .map(el => el.dataset.value);
+}
+
+function setTagsInContainer(containerId, tags) {
+  const container = document.getElementById(containerId);
+  container.querySelectorAll('.tag-item').forEach(el => el.remove());
+  const input = container.querySelector('.tag-input');
+  (tags || []).forEach(tag => {
+    const span = document.createElement('span');
+    span.className = 'tag-item';
+    span.dataset.value = tag;
+    span.innerHTML = esc(tag) + '<button class="tag-remove" type="button">&times;</button>';
+    span.querySelector('.tag-remove').addEventListener('click', (e) => {
+      e.stopPropagation();
+      span.remove();
+    });
+    container.insertBefore(span, input);
+  });
+  input.value = '';
+}
+
+function addTagFromInput(containerId, inputEl) {
+  const val = inputEl.value.trim();
+  if (!val) return;
+  const container = document.getElementById(containerId);
+  const span = document.createElement('span');
+  span.className = 'tag-item';
+  span.dataset.value = val;
+  span.innerHTML = esc(val) + '<button class="tag-remove" type="button">&times;</button>';
+  span.querySelector('.tag-remove').addEventListener('click', (e) => {
+    e.stopPropagation();
+    span.remove();
+  });
+  container.insertBefore(span, inputEl);
+  inputEl.value = '';
+}
+
 function openAddModal() {
   editingId = null;
   document.getElementById('modal-title').textContent = '단어 추가';
   document.getElementById('input-word').value = '';
   document.getElementById('input-meaning').value = '';
-  document.getElementById('input-synonym').value = '';
-  document.getElementById('input-antonym').value = '';
+  setTagsInContainer('synonym-tags', []);
+  setTagsInContainer('antonym-tags', []);
   document.getElementById('add-modal').classList.add('active');
   setTimeout(() => document.getElementById('input-word').focus(), 100);
 }
@@ -1013,8 +1132,8 @@ function editWord(i) {
   document.getElementById('modal-title').textContent = '단어 수정';
   document.getElementById('input-word').value = w.word;
   document.getElementById('input-meaning').value = w.meaning;
-  document.getElementById('input-synonym').value = w.synonym || '';
-  document.getElementById('input-antonym').value = w.antonym || '';
+  setTagsInContainer('synonym-tags', w.synonym || []);
+  setTagsInContainer('antonym-tags', w.antonym || []);
   document.getElementById('add-modal').classList.add('active');
   setTimeout(() => document.getElementById('input-word').focus(), 100);
 }
@@ -1026,8 +1145,13 @@ function closeAddModal() {
 function saveWord() {
   const word = document.getElementById('input-word').value.trim();
   const meaning = document.getElementById('input-meaning').value.trim();
-  const synonym = document.getElementById('input-synonym').value.trim();
-  const antonym = document.getElementById('input-antonym').value.trim();
+  // Flush any text left in the tag inputs
+  const synInput = document.getElementById('input-synonym');
+  const antInput = document.getElementById('input-antonym');
+  if (synInput.value.trim()) addTagFromInput('synonym-tags', synInput);
+  if (antInput.value.trim()) addTagFromInput('antonym-tags', antInput);
+  const synonym = getTagsFromContainer('synonym-tags');
+  const antonym = getTagsFromContainer('antonym-tags');
   if (!word || !meaning) {
     showToast('영단어와 뜻은 필수입니다.');
     return;
@@ -1107,8 +1231,8 @@ function showCard() {
 
   document.getElementById('extra-syn').classList.remove('visible');
   document.getElementById('extra-ant').classList.remove('visible');
-  document.getElementById('extra-syn-val').textContent = w.synonym || '-';
-  document.getElementById('extra-ant-val').textContent = w.antonym || '-';
+  document.getElementById('extra-syn-val').textContent = (w.synonym||[]).length ? w.synonym.join(', ') : '-';
+  document.getElementById('extra-ant-val').textContent = (w.antonym||[]).length ? w.antonym.join(', ') : '-';
 }
 
 function revealAnswer() {
@@ -1244,8 +1368,24 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
   });
 });
 
-document.getElementById('input-antonym').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') saveWord();
+// Tag input: Enter to add tag, Backspace to remove last tag
+['synonym', 'antonym'].forEach(type => {
+  const input = document.getElementById('input-' + type);
+  const containerId = type + '-tags';
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (input.value.trim()) {
+        addTagFromInput(containerId, input);
+      } else {
+        saveWord();
+      }
+    }
+    if (e.key === 'Backspace' && !input.value) {
+      const tags = document.getElementById(containerId).querySelectorAll('.tag-item');
+      if (tags.length) tags[tags.length - 1].remove();
+    }
+  });
 });
 
 renderWords();
@@ -1325,7 +1465,11 @@ function startSync(code) {
     const remoteWords = snapshot.val();
     if (remoteWords && Array.isArray(remoteWords)) {
       isSyncing = true;
-      words = remoteWords;
+      words = remoteWords.map(w => ({
+        ...w,
+        synonym: Array.isArray(w.synonym) ? w.synonym : (w.synonym ? w.synonym.split(',').map(s => s.trim()).filter(Boolean) : []),
+        antonym: Array.isArray(w.antonym) ? w.antonym : (w.antonym ? w.antonym.split(',').map(s => s.trim()).filter(Boolean) : [])
+      }));
       localStorage.setItem('vocab-words', JSON.stringify(words));
       renderWords();
       isSyncing = false;
