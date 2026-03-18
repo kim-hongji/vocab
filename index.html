@@ -778,6 +778,11 @@ body {
   cursor: text;
   transition: all 0.15s;
 }
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 .tag-input-container:focus-within {
   border-color: var(--ring);
   box-shadow: 0 0 0 2px oklch(0.708 0 0 / 0.2);
@@ -785,7 +790,6 @@ body {
 .tag-item {
   display: inline-flex;
   align-items: center;
-  align-self: flex-start;
   gap: 4px;
   padding: 2px 8px;
   background: var(--secondary);
@@ -963,12 +967,14 @@ body {
     <div class="form-group">
       <label>동의어</label>
       <div class="tag-input-container" id="synonym-tags" onclick="this.querySelector('.tag-input').focus()">
+        <div class="tag-list" id="synonym-tag-list"></div>
         <input type="text" class="tag-input" id="input-synonym" placeholder="입력 후 Enter">
       </div>
     </div>
     <div class="form-group">
       <label>반의어</label>
       <div class="tag-input-container" id="antonym-tags" onclick="this.querySelector('.tag-input').focus()">
+        <div class="tag-list" id="antonym-tag-list"></div>
         <input type="text" class="tag-input" id="input-antonym" placeholder="입력 후 Enter">
       </div>
     </div>
@@ -1075,33 +1081,16 @@ function esc(s) {
   return d.innerHTML;
 }
 
+function getTagListId(containerId) {
+  return containerId.replace('-tags', '-tag-list');
+}
+
 function getTagsFromContainer(containerId) {
-  return Array.from(document.getElementById(containerId).querySelectorAll('.tag-item'))
+  return Array.from(document.getElementById(getTagListId(containerId)).querySelectorAll('.tag-item'))
     .map(el => el.dataset.value);
 }
 
-function setTagsInContainer(containerId, tags) {
-  const container = document.getElementById(containerId);
-  container.querySelectorAll('.tag-item').forEach(el => el.remove());
-  const input = container.querySelector('.tag-input');
-  (tags || []).forEach(tag => {
-    const span = document.createElement('span');
-    span.className = 'tag-item';
-    span.dataset.value = tag;
-    span.innerHTML = esc(tag) + '<button class="tag-remove" type="button">&times;</button>';
-    span.querySelector('.tag-remove').addEventListener('click', (e) => {
-      e.stopPropagation();
-      span.remove();
-    });
-    container.insertBefore(span, input);
-  });
-  input.value = '';
-}
-
-function addTagFromInput(containerId, inputEl) {
-  const val = inputEl.value.trim();
-  if (!val) return;
-  const container = document.getElementById(containerId);
+function createTagEl(val) {
   const span = document.createElement('span');
   span.className = 'tag-item';
   span.dataset.value = val;
@@ -1110,7 +1099,20 @@ function addTagFromInput(containerId, inputEl) {
     e.stopPropagation();
     span.remove();
   });
-  container.insertBefore(span, inputEl);
+  return span;
+}
+
+function setTagsInContainer(containerId, tags) {
+  const list = document.getElementById(getTagListId(containerId));
+  list.innerHTML = '';
+  (tags || []).forEach(tag => list.appendChild(createTagEl(tag)));
+  document.getElementById(containerId).querySelector('.tag-input').value = '';
+}
+
+function addTagFromInput(containerId, inputEl) {
+  const val = inputEl.value.trim();
+  if (!val) return;
+  document.getElementById(getTagListId(containerId)).appendChild(createTagEl(val));
   inputEl.value = '';
 }
 
@@ -1381,7 +1383,7 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
       }
     }
     if (e.key === 'Backspace' && !input.value) {
-      const tags = document.getElementById(containerId).querySelectorAll('.tag-item');
+      const tags = document.getElementById(getTagListId(containerId)).querySelectorAll('.tag-item');
       if (tags.length) tags[tags.length - 1].remove();
     }
   });
