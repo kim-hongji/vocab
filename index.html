@@ -768,7 +768,7 @@ body {
 /* ===== Tag Input ===== */
 .tag-input-container {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
   padding: 8px 10px;
   min-height: 40px;
@@ -777,7 +777,6 @@ body {
   border-radius: calc(var(--radius) - 2px);
   cursor: text;
   transition: all 0.15s;
-  align-items: center;
 }
 .tag-input-container:focus-within {
   border-color: var(--ring);
@@ -786,6 +785,7 @@ body {
 .tag-item {
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
   gap: 4px;
   padding: 2px 8px;
   background: var(--secondary);
@@ -817,8 +817,7 @@ body {
   color: var(--destructive-foreground);
 }
 .tag-input {
-  flex: 1;
-  min-width: 80px;
+  width: 100%;
   border: none;
   outline: none;
   background: transparent;
