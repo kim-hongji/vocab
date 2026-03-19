@@ -765,6 +765,44 @@ body {
   margin: 16px 0;
 }
 
+/* ===== Select ===== */
+.form-group select {
+  width: 100%;
+  padding: 0 12px;
+  height: 40px;
+  background: var(--background);
+  border: 1px solid var(--input);
+  border-radius: calc(var(--radius) - 2px);
+  color: var(--foreground);
+  font-size: 14px;
+  outline: none;
+  transition: all 0.15s;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+.form-group select:focus {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px oklch(0.708 0 0 / 0.2);
+}
+.select-with-add {
+  display: flex;
+  gap: 8px;
+}
+.select-with-add select { flex: 1; }
+.select-with-add .btn-icon { flex-shrink: 0; }
+
+.badge-category {
+  background: oklch(0.517 0.174 162.48 / 0.1);
+  color: oklch(0.417 0.14 162.48);
+  border-color: oklch(0.517 0.174 162.48 / 0.15);
+}
+
 /* ===== Tag Input ===== */
 .tag-input-container {
   display: flex;
@@ -965,6 +1003,17 @@ body {
       <input type="text" id="input-meaning" placeholder="예: 풍부한, 많은">
     </div>
     <div class="form-group">
+      <label>카테고리</label>
+      <div class="select-with-add">
+        <select id="input-category">
+          <option value="">선택 안 함</option>
+        </select>
+        <button class="btn-icon" type="button" onclick="addNewCategory()" title="새 카테고리 추가">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="form-group">
       <label>동의어</label>
       <div class="tag-input-container" id="synonym-tags" onclick="this.querySelector('.tag-input').focus()">
         <div class="tag-list" id="synonym-tag-list"></div>
@@ -1026,6 +1075,7 @@ words = words.map(w => ({
 }));
 localStorage.setItem('vocab-words', JSON.stringify(words));
 
+let categories = JSON.parse(localStorage.getItem('vocab-categories') || '[]');
 let editingId = null;
 let studyMode = 'meaning-to-word';
 let shuffleOn = true;
@@ -1037,6 +1087,29 @@ let wrongWords = [];
 
 function save() {
   localStorage.setItem('vocab-words', JSON.stringify(words));
+}
+
+function saveCategories() {
+  localStorage.setItem('vocab-categories', JSON.stringify(categories));
+}
+
+function populateCategorySelect(selected) {
+  const sel = document.getElementById('input-category');
+  sel.innerHTML = '<option value="">선택 안 함</option>' +
+    categories.map(c => `<option value="${esc(c)}"${c === selected ? ' selected' : ''}>${esc(c)}</option>`).join('');
+}
+
+function addNewCategory() {
+  const name = prompt('새 카테고리 이름을 입력하세요.');
+  if (!name || !name.trim()) return;
+  const trimmed = name.trim();
+  if (categories.includes(trimmed)) {
+    showToast('이미 있는 카테고리입니다.');
+  } else {
+    categories.push(trimmed);
+    saveCategories();
+  }
+  populateCategorySelect(trimmed);
 }
 
 function switchTab(tab) {
@@ -1068,6 +1141,7 @@ function renderWords() {
       </div>
       <div class="word-meaning">${esc(w.meaning)}</div>
       <div class="word-meta">
+        ${w.category ? `<span class="badge badge-category">${esc(w.category)}</span>` : ''}
         ${(w.synonym||[]).map(s => `<span class="badge badge-syn">${esc(s)}</span>`).join('')}
         ${(w.antonym||[]).map(s => `<span class="badge badge-ant">${esc(s)}</span>`).join('')}
       </div>
@@ -1121,6 +1195,7 @@ function openAddModal() {
   document.getElementById('modal-title').textContent = '단어 추가';
   document.getElementById('input-word').value = '';
   document.getElementById('input-meaning').value = '';
+  populateCategorySelect('');
   setTagsInContainer('synonym-tags', []);
   setTagsInContainer('antonym-tags', []);
   document.getElementById('add-modal').classList.add('active');
@@ -1133,6 +1208,7 @@ function editWord(i) {
   document.getElementById('modal-title').textContent = '단어 수정';
   document.getElementById('input-word').value = w.word;
   document.getElementById('input-meaning').value = w.meaning;
+  populateCategorySelect(w.category || '');
   setTagsInContainer('synonym-tags', w.synonym || []);
   setTagsInContainer('antonym-tags', w.antonym || []);
   document.getElementById('add-modal').classList.add('active');
@@ -1151,13 +1227,14 @@ function saveWord() {
   const antInput = document.getElementById('input-antonym');
   if (synInput.value.trim()) addTagFromInput('synonym-tags', synInput);
   if (antInput.value.trim()) addTagFromInput('antonym-tags', antInput);
+  const category = document.getElementById('input-category').value;
   const synonym = getTagsFromContainer('synonym-tags');
   const antonym = getTagsFromContainer('antonym-tags');
   if (!word || !meaning) {
     showToast('영단어와 뜻은 필수입니다.');
     return;
   }
-  const entry = { word, meaning, synonym, antonym };
+  const entry = { word, meaning, category, synonym, antonym };
   if (editingId !== null) {
     words[editingId] = entry;
     showToast('단어가 수정되었습니다.');
@@ -1443,9 +1520,11 @@ window.updateSyncStatus = function() {
 function pushToFirebase() {
   const code = getSyncCode();
   if (!code || isSyncing) return;
-  const wordsRef = ref(db, 'rooms/' + code + '/words');
-  set(wordsRef, words).catch(err => {
+  set(ref(db, 'rooms/' + code + '/words'), words).catch(err => {
     console.error('Firebase push error:', err);
+  });
+  set(ref(db, 'rooms/' + code + '/categories'), categories).catch(err => {
+    console.error('Firebase push categories error:', err);
   });
 }
 
@@ -1460,6 +1539,15 @@ function startSync(code) {
 
   // Push current local data first
   pushToFirebase();
+
+  // Listen for remote categories
+  onValue(ref(db, 'rooms/' + code + '/categories'), (snapshot) => {
+    const remoteCats = snapshot.val();
+    if (remoteCats && Array.isArray(remoteCats)) {
+      categories = remoteCats;
+      localStorage.setItem('vocab-categories', JSON.stringify(categories));
+    }
+  });
 
   // Listen for remote changes
   syncListener = onValue(wordsRef, (snapshot) => {
@@ -1482,6 +1570,11 @@ function startSync(code) {
 const originalSave = window.save;
 window.save = function() {
   originalSave();
+  pushToFirebase();
+};
+const originalSaveCats = window.saveCategories;
+window.saveCategories = function() {
+  originalSaveCats();
   pushToFirebase();
 };
 
