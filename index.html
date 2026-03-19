@@ -1132,6 +1132,7 @@ function renderWords() {
   empty.style.display = 'none';
   list.innerHTML = words.map((w, i) => `
     <div class="word-item">
+      ${w.category ? `<div style="font-size:12px;color:var(--muted-foreground);margin-bottom:2px;">${esc(w.category)}</div>` : ''}
       <div class="word-item-header">
         <h3>${esc(w.word)}</h3>
         <div class="word-item-actions">
@@ -1141,7 +1142,6 @@ function renderWords() {
       </div>
       <div class="word-meaning">${esc(w.meaning)}</div>
       <div class="word-meta">
-        ${w.category ? `<span class="badge badge-category">${esc(w.category)}</span>` : ''}
         ${(w.synonym||[]).map(s => `<span class="badge badge-syn">${esc(s)}</span>`).join('')}
         ${(w.antonym||[]).map(s => `<span class="badge badge-ant">${esc(s)}</span>`).join('')}
       </div>
