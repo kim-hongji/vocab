@@ -903,6 +903,11 @@ body {
 
 <!-- Word List Page -->
 <div id="page-list" class="page active">
+  <div id="category-filter" style="padding:0 0 8px 0;">
+    <select id="filter-category" onchange="renderWords()" style="width:100%;height:36px;padding:0 10px;border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);background:var(--card);color:var(--foreground);font-size:13px;font-family:inherit;cursor:pointer;">
+      <option value="">전체 카테고리</option>
+    </select>
+  </div>
   <div id="word-list" class="word-list"></div>
   <div id="empty-state" class="empty-state" style="display:none;">
     <div class="empty-state-icon">
@@ -1121,23 +1126,46 @@ function switchTab(tab) {
   if (tab === 'study') updateStudyWordCount();
 }
 
+function populateFilterCategory() {
+  const sel = document.getElementById('filter-category');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">전체 카테고리</option>' +
+    categories.map(c => `<option value="${esc(c)}"${c === current ? ' selected' : ''}>${esc(c)}</option>`).join('') +
+    '<option value="__none__">카테고리 없음</option>';
+}
+
 function renderWords() {
   const list = document.getElementById('word-list');
   const empty = document.getElementById('empty-state');
+  const filterCat = document.getElementById('filter-category').value;
+  populateFilterCategory();
+
+  const filtered = words.map((w, i) => ({ ...w, _idx: i })).filter(w => {
+    if (!filterCat) return true;
+    if (filterCat === '__none__') return !w.category;
+    return w.category === filterCat;
+  });
+
   if (words.length === 0) {
     list.innerHTML = '';
     empty.style.display = 'block';
     return;
   }
   empty.style.display = 'none';
-  list.innerHTML = words.map((w, i) => `
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--muted-foreground);font-size:13px;">해당 카테고리에 단어가 없습니다.</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(w => `
     <div class="word-item">
       ${w.category ? `<div style="font-size:12px;color:var(--muted-foreground);margin-bottom:2px;">${esc(w.category)}</div>` : ''}
       <div class="word-item-header">
         <h3>${esc(w.word)}</h3>
         <div class="word-item-actions">
-          <button class="btn btn-ghost btn-sm" onclick="editWord(${i})">수정</button>
-          <button class="btn btn-ghost btn-sm" style="color:var(--destructive)" onclick="deleteWord(${i})">삭제</button>
+          <button class="btn btn-ghost btn-sm" onclick="editWord(${w._idx})">수정</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--destructive)" onclick="deleteWord(${w._idx})">삭제</button>
         </div>
       </div>
       <div class="word-meaning">${esc(w.meaning)}</div>
@@ -1413,11 +1441,13 @@ function importData() {
     if (!Array.isArray(data)) throw new Error();
     const valid = data.every(d => d.word && d.meaning);
     if (!valid) throw new Error();
-    words = data;
+    const existingSet = new Set(words.map(w => w.word.toLowerCase()));
+    const newWords = data.filter(d => !existingSet.has(d.word.toLowerCase()));
+    words = words.concat(newWords);
     save();
     renderWords();
     closeDataModal();
-    showToast(`${data.length}개 단어를 가져왔습니다.`);
+    showToast(`${newWords.length}개 단어 추가 (중복 ${data.length - newWords.length}개 제외)`);
   } catch {
     showToast('올바른 JSON 형식이 아닙니다.');
   }
@@ -1537,8 +1567,11 @@ function startSync(code) {
 
   const wordsRef = ref(db, 'rooms/' + code + '/words');
 
-  // Push current local data first
-  pushToFirebase();
+  // Only push if local data is non-empty; otherwise wait for Firebase data
+  const hasLocalData = words.length > 0 || categories.length > 0;
+  if (hasLocalData) {
+    pushToFirebase();
+  }
 
   // Listen for remote categories
   onValue(ref(db, 'rooms/' + code + '/categories'), (snapshot) => {
